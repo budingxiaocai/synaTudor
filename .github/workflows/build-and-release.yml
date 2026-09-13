@@ -42,6 +42,8 @@ jobs:
             libgusb-dev \
             libnss3-dev \
             libpixman-1-dev \
+            gobject-introspection \
+            libgirepository1.0-dev \
             gtk-doc-tools
  
       - name: Cache libfprint-tod build output
