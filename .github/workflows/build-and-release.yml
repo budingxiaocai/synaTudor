@@ -30,6 +30,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential meson ninja-build pkg-config cmake \
             git wget innoextract \
+            libfprint-2-tod-dev \
             libusb-1.0-0-dev \
             libcurl4-openssl-dev \
             libssl-dev \
@@ -42,31 +43,7 @@ jobs:
             libgusb-dev \
             libnss3-dev \
             libpixman-1-dev \
-            gobject-introspection \
-            libgirepository1.0-dev \
             gtk-doc-tools
- 
-      - name: Cache libfprint-tod build output
-        id: cache-libfprint-tod
-        uses: actions/cache@v4
-        with:
-          path: /opt/libfprint-tod-install
-          key: libfprint-tod-${{ env.LIBFPRINT_TOD_BRANCH }}-${{ runner.os }}-v1
- 
-      - name: Build and install libfprint-tod
-        if: steps.cache-libfprint-tod.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 --branch "${LIBFPRINT_TOD_BRANCH}" "${LIBFPRINT_TOD_REPO}" /tmp/libfprint-tod-src
-          cd /tmp/libfprint-tod-src
-          meson setup build --prefix=/opt/libfprint-tod-install/usr -Dversion-script=false
-          ninja -C build
-          ninja -C build install
- 
-      - name: Apply libfprint-tod to system environment
-        run: |
-          sudo rsync -a /opt/libfprint-tod-install/ /
-          sudo ldconfig
-          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
  
       - name: Configure build (meson setup)
         run: meson setup build --prefix=/usr --buildtype=release
