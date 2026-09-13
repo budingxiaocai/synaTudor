@@ -1,0 +1,116 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+ 
+permissions:
+  contents: write
+ 
+env:
+  LIBFPRINT_TOD_REPO: https://gitlab.freedesktop.org/3v1n0/libfprint.git
+  LIBFPRINT_TOD_BRANCH: tod
+ 
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+ 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential meson ninja-build pkg-config cmake \
+            git wget innoextract \
+            libusb-1.0-0-dev \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libcap-dev \
+            libseccomp-dev \
+            libglib2.0-dev \
+            libdbus-glib-1-dev \
+            libjson-glib-dev \
+            libgudev-1.0-dev \
+            libgusb-dev \
+            libnss3-dev \
+            libpixman-1-dev \
+            gtk-doc-tools
+ 
+      - name: Cache libfprint-tod build output
+        id: cache-libfprint-tod
+        uses: actions/cache@v4
+        with:
+          path: /opt/libfprint-tod-install
+          key: libfprint-tod-${{ env.LIBFPRINT_TOD_BRANCH }}-${{ runner.os }}-v1
+ 
+      - name: Build and install libfprint-tod
+        if: steps.cache-libfprint-tod.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "${LIBFPRINT_TOD_BRANCH}" "${LIBFPRINT_TOD_REPO}" /tmp/libfprint-tod-src
+          cd /tmp/libfprint-tod-src
+          meson setup build --prefix=/opt/libfprint-tod-install/usr
+          ninja -C build
+          ninja -C build install
+ 
+      - name: Apply libfprint-tod to system environment
+        run: |
+          sudo rsync -a /opt/libfprint-tod-install/ /
+          sudo ldconfig
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+ 
+      - name: Configure build (meson setup)
+        run: meson setup build --prefix=/usr --buildtype=release
+ 
+      - name: Build (ninja)
+        run: ninja -C build
+ 
+      - name: Install to temporary packaging directory
+        run: |
+          mkdir -p "${{ github.workspace }}/pkgroot"
+          DESTDIR="${{ github.workspace }}/pkgroot" ninja -C build install
+ 
+      - name: Package into tar.gz
+        id: package
+        run: |
+          VERSION="${GITHUB_REF_NAME:-dev-$(git rev-parse --short HEAD)}"
+          PKG_NAME="synaTudor-${VERSION}-x86_64-linux-gnu"
+          mkdir -p dist
+          tar -C pkgroot -czvf "dist/${PKG_NAME}.tar.gz" .
+          sha256sum "dist/${PKG_NAME}.tar.gz" > "dist/${PKG_NAME}.tar.gz.sha256"
+          echo "pkg_name=${PKG_NAME}" >> "$GITHUB_OUTPUT"
+ 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: synatudor-package
+          path: dist/*
+          if-no-files-found: error
+ 
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: synatudor-package
+          path: dist
+ 
+      - name: Create GitHub Release and upload package
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
