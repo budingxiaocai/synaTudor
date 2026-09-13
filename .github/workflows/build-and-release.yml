@@ -58,11 +58,7 @@ jobs:
         run: |
           git clone --depth 1 --branch "${LIBFPRINT_TOD_BRANCH}" "${LIBFPRINT_TOD_REPO}" /tmp/libfprint-tod-src
           cd /tmp/libfprint-tod-src
-          
-          mkdir -p libfprint/tod
-          echo "LIBFPRINT_TOD_0.0.1 { global: *; };" > libfprint/tod/libfprint-tod.ver
-          
-          meson setup build --prefix=/opt/libfprint-tod-install/usr
+          meson setup build --prefix=/opt/libfprint-tod-install/usr -Dversion-script=false
           ninja -C build
           ninja -C build install
  
